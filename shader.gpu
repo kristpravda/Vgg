@@ -3,74 +3,23 @@
 // Vertex shader
 const vertexShaderSource = `
 attribute vec3 vertex;
-attribute vec2 texture;
-uniform mat4 ModelViewMatrix;
-uniform mat4 ProjectionMatrix;
+attribute vec3 normal;
+uniform mat4 ModelViewProjectionMatrix;
+uniform mat4 NormalMatrix;
+varying vec3 toV;
+varying vec3 toL;
+varying vec3 normale;
 
-varying vec2 v_texcoord;
-
-uniform vec3 translatePoint;
-uniform vec2 texturePoint;
-uniform float scalingKoef;
-
-mat4 translation(float tx, float ty, float tz) {
-    mat4 dst;
-
-    dst[0][0] = 1.0;
-    dst[0][1] = 0.0;
-    dst[0][2] = 0.0;
-    dst[0][3] = 0.0;
-    dst[1][0] = 0.0;
-    dst[1][1] = 1.0;
-    dst[1][2] = 0.0;
-    dst[1][3] = 0.0;
-    dst[2][0] = 0.0;
-    dst[2][1] = 0.0;
-    dst[2][2] = 1.0;
-    dst[2][3] = 0.0;
-    dst[3][0] = tx;
-    dst[3][1] = ty;
-    dst[3][2] = tz;
-    dst[3][3] = 1.0;
-    return dst;
-}
-mat4 scaling(float s){
-    mat4 dst;
-
-    dst[0][0] = s;
-    dst[0][1] = 0.0;
-    dst[0][2] = 0.0;
-    dst[0][3] = 0.0;
-    dst[1][0] = 0.0;
-    dst[1][1] = s;
-    dst[1][2] = 0.0;
-    dst[1][3] = 0.0;
-    dst[2][0] = 0.0;
-    dst[2][1] = 0.0;
-    dst[2][2] = s;
-    dst[2][3] = 0.0;
-    dst[3][0] = 0.0;
-    dst[3][1] = 0.0;
-    dst[3][2] = 0.0;
-    dst[3][3] = 1.0;
-
-    return dst;
-}
+uniform vec3 lPos;
+varying vec3 lPose;
 
 void main() {
-    mat4 sMatrix = scaling(scalingKoef);
-    mat4 t1Matrix = translation(texturePoint.x,texturePoint.y,0.0);
-    mat4 t2Matrix = translation(-texturePoint.x,-texturePoint.y,0.0);
-    vec4 texture1 = vec4(texture,0.0,0.0)*t1Matrix;
-    vec4 textureRotated = texture1*sMatrix;
-    vec4 texture2 = textureRotated*t2Matrix;
-    v_texcoord = vec2(texture2.x,texture2.y);
-    vec4 vertPos4 = ModelViewMatrix * vec4(vertex, 1.0);
-    gl_Position =ProjectionMatrix* vertPos4;
-    //if(scalingKoef<0.0){
-    //    vec4 tPoint = translation(translatePoint.x,translatePoint.y,translatePoint.z)*vec4(vertex,1.0);
-    //    gl_Position = ModelViewProjectionMatrix*tPoint;
-    //}
+    toV = mat3(ModelViewProjectionMatrix)*-vertex;
+    lPose = mat3(ModelViewProjectionMatrix)*lPos;
+    toL = lPose-mat3(ModelViewProjectionMatrix)*vertex;
+    normale = mat3(NormalMatrix)*-normal;
+    
+    gl_Position = ModelViewProjectionMatrix * vec4(vertex,1.0);
 }`;
 
 
@@ -82,15 +31,32 @@ const fragmentShaderSource = `
    precision mediump float;
 #endif
 
-varying vec2 v_texcoord;
-uniform sampler2D tmu;
-uniform float scalingKoef;
-
+uniform vec4 color;
+varying vec3 toV;
+varying vec3 toL;
+varying vec3 normale;
+uniform vec3 lDir;
+varying vec3 lPose;
+uniform float lim;
+uniform float eas;
 void main() {
-    //Applying texture
-    vec4 texColor = texture2D(tmu, v_texcoord);
-    gl_FragColor = texColor;
-    if(scalingKoef<0.0){
-        gl_FragColor = vec4(0.,0.,0.,0.);
+    vec3 n = normale;
+    vec3 tv = toV;
+    vec3 tl = toL;
+    vec3 halfVector = normalize(tl + tv);
+    float inDir = dot(tl,-normalize(lDir));
+    float inLim = smoothstep(lim,lim+eas, inDir);
+    float light = inLim * dot(n, tl);
+    float spec = inLim * pow(dot(n, halfVector), 80.0);
+    gl_FragColor = color;
+
+    // Lets multiply just the color portion (not the alpha)
+    // by the light
+    gl_FragColor.rgb *= light*0.05;
+
+    // Just add in the specular
+    //gl_FragColor.rgb += spec;
+    if(gl_FragColor.r<0.2){
+        gl_FragColor.rgb = vec3(color)*0.1;
     }
 }`;
